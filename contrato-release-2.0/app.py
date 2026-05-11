@@ -547,6 +547,40 @@ def extrair_dados_xml(texto_xml, dados):
         for c in chaves_do_proprio_cte:
             if eh_chave_valida(c) and c not in dados["xml_chaves_cte"]:
                 dados["xml_chaves_cte"].append(c)
+        # --- NOVA LÓGICA: EXTRAÇÃO DO REMETENTE NO CT-e ---
+        rem_match = re.search(r"<rem>(.*?)</rem>", texto_xml, re.IGNORECASE | re.DOTALL)
+        if rem_match:
+            bloco_rem = rem_match.group(1)
+            
+            # Razão Social e CNPJ do Remetente
+            nome_rem = re.search(r"<xNome>(.*?)</xNome>", bloco_rem, re.IGNORECASE)
+            cnpj_rem = re.search(r"<CNPJ>(.*?)</CNPJ>", bloco_rem, re.IGNORECASE) or \
+                    re.search(r"<CPF>(.*?)</CPF>", bloco_rem, re.IGNORECASE)
+            
+            if nome_rem:
+                dados["remetente_nome"] = nome_rem.group(1).upper()
+            if cnpj_rem:
+                dados["remetente_cnpj"] = formatar_cnpj(cnpj_rem.group(1))
+                
+            # Endereço do Remetente no CT-e
+            ender_rem = re.search(r"<enderRem>(.*?)</enderRem>", bloco_rem, re.IGNORECASE | re.DOTALL)
+            if ender_rem:
+                b = ender_rem.group(1)
+                lgr = re.search(r"<xLgr>(.*?)</xLgr>", b, re.IGNORECASE)
+                nro = re.search(r"<nro>(.*?)</nro>", b, re.IGNORECASE)
+                bairro = re.search(r"<xBairro>(.*?)</xBairro>", b, re.IGNORECASE)
+                mun = re.search(r"<xMun>(.*?)</xMun>", b, re.IGNORECASE)
+                uf = re.search(r"<UF>(.*?)</UF>", b, re.IGNORECASE)
+                
+                # Monta o endereço e a cidade (origem)
+                partes = []
+                if lgr: partes.append(lgr.group(1))
+                if nro: partes.append(nro.group(1))
+                if bairro: partes.append(bairro.group(1))
+                dados["remetente_end"] = ", ".join(partes).upper()
+                
+                if mun and uf:
+                    dados["origem"] = f"{mun.group(1)} / {uf.group(1)}".upper()
         
     # CT-e
     if "<infcte" in texto_xml_lower:
@@ -966,33 +1000,52 @@ def main():
                 st.subheader("🏢 Dados do Remetente (Emitente da NF)")
                 col_rem1, col_rem2 = st.columns([2, 1])
                 with col_rem1:
-                    dados["remetente_nome"] = st.text_input("RAZÃO SOCIAL DO REMETENTE", value=dados.get("remetente_nome", "")).upper()
-                with col_rem2:
                     dados["remetente_cnpj"] = st.text_input("CNPJ DO REMETENTE", value=dados.get("remetente_cnpj", ""))
-                dados["remetente_end"] = st.text_area("ENDEREÇO DO REMETENTE", value=dados.get("remetente_end", ""), height=68).upper()
+                with col_rem2:
+                    dados["remetente_nome"] = st.text_input("RAZÃO SOCIAL DO REMETENTE", value=dados.get("remetente_nome", "")).upper()
+                col_rem_end, col_rem_cid = st.columns([2, 1])
+                with col_rem_end:
+                    dados["remetente_end"] = st.text_area("ENDEREÇO DO REMETENTE", value=dados.get("remetente_end", ""), height=68).upper()
+                with col_rem_cid:
+                    dados["origem"] = st.text_input("CIDADE / UF (REMETENTE)", value=dados.get("origem", "")).upper()
 
                 # --- DADOS DO DESTINATÁRIO ---
                 st.markdown("---")
                 st.subheader("🏢 Dados do Destinatário")
                 col_dest1, col_dest2 = st.columns([2, 1])
                 with col_dest1:
-                    dados["destinatario_nome"] = st.text_input("RAZÃO SOCIAL DO DESTINATÁRIO", value=dados.get("destinatario_nome", "")).upper()
-                with col_dest2:
                     dados["destinatario_cnpj"] = st.text_input("CNPJ DO DESTINATÁRIO", value=dados.get("destinatario_cnpj", ""))
+                with col_dest2:
+                    dados["destinatario_nome"] = st.text_input("RAZÃO SOCIAL DO DESTINATÁRIO", value=dados.get("destinatario_nome", "")).upper()
                 col_dest_end, col_dest_cid = st.columns([2, 1])
                 with col_dest_end:
                     dados["destinatario_end"] = st.text_input("ENDEREÇO DO DESTINATÁRIO", value=dados.get("destinatario_end", "")).upper()
                 with col_dest_cid:
                     dados["destino"] = st.text_input("CIDADE / UF (DESTINATÁRIO)", value=dados.get("destino", "")).upper()
 
+                # --- DADOS DO RECEBEDOR ---
+                st.markdown("---")
+                st.subheader("🚚 Dados do Recebedor")
+                col_rec1, col_rec2 = st.columns([2, 1])
+                with col_rec1:
+                    dados["recebedor_cnpj"] = st.text_input("CNPJ DO RECEBEDOR", value=dados.get("recebedor_cnpj", ""))
+                    
+                with col_rec2:
+                    dados["recebedor_nome"] = st.text_input("RAZÃO SOCIAL DO RECEBEDOR", value=dados.get("recebedor_nome", "")).upper()
+                col_rec_end, col_rec_cid = st.columns([2, 1])
+                with col_rec_end:
+                    dados["recebedor_end"] = st.text_input("ENDEREÇO DO RECEBEDOR", value=dados.get("recebedor_end", "")).upper()
+                with col_rec_cid:
+                    dados["recebedor_cidade"] = st.text_input("CIDADE / UF (RECEBEDOR)", value=dados.get("recebedor_cidade", "")).upper()
+
                 # --- DADOS DO EXPEDIDOR ---
                 st.markdown("---")
                 st.subheader("📍 Dados do Expedidor (Local de Retirada)")
                 col_exp1, col_exp2 = st.columns([2, 1])
                 with col_exp1:
-                    dados["expedidor_nome"] = st.text_input("RAZÃO SOCIAL DO EXPEDIDOR", value=dados.get("expedidor_nome", "")).upper()
-                with col_exp2:
                     dados["expedidor_cnpj"] = st.text_input("CNPJ DO EXPEDIDOR", value=dados.get("expedidor_cnpj", ""))
+                with col_exp2:
+                    dados["expedidor_nome"] = st.text_input("RAZÃO SOCIAL DO EXPEDIDOR", value=dados.get("expedidor_nome", "")).upper()
                 col_exp_end, col_exp_cid = st.columns([2, 1])
                 with col_exp_end:
                     dados["expedidor_end"] = st.text_input("ENDEREÇO DO EXPEDIDOR", value=dados.get("expedidor_end", "")).upper()
@@ -1147,8 +1200,17 @@ def main():
             </style>
         """, unsafe_allow_html=True)
         
+        # --- DADOS DA CARGA ---
+        st.markdown("---")
+        st.subheader("📦 Dados do Condutor Responsável")
+        # Campos do Motorista adicionados ACIMA da Mercadoria
+        col_mot_cte, col_cpf_cte = st.columns([2, 1])
+        with col_mot_cte:
+            dados["motorista"] = st.text_input("NOME DO CONDUTOR", value=dados.get("motorista", "")).upper()
+        with col_cpf_cte:
+            dados["cpf_motorista"] = st.text_input("CPF DO CONDUTOR", value=dados.get("cpf_motorista", ""))
+
         col1, col2 = st.columns(2)
-        
         with col1:
             mercadoria_edit = st.text_input("MERCADORIA", value=dados.get("mercadoria", "Diversos"))
             
