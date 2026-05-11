@@ -890,6 +890,19 @@ def main():
         cnpj_limpo = re.sub(r'\D', '', cnpj_input)
         dados["transp_cnpj"] = formatar_cnpj(cnpj_input)
 
+        # Lista apenas com os números dos CNPJs bloqueados
+        bloqueados = [
+            "32368678000118", "32368678000207", "32368678000380",
+            "32368678000460", "32368678000541", "32368678000622",
+            "32368678000703"
+        ]
+        if cnpj_limpo in bloqueados:
+            st.error("🚫 **BLOQUEADO:** Este CNPJ pertence a uma das filiais da **Rodo Amazônia**. Não é permitido emitir contrato de terceiro para filiais próprias nesta etapa.")
+            st.stop() # Interrompe o script aqui
+    # --- FIM DA VALIDAÇÃO ---
+
+        dados["transp_cnpj"] = formatar_cnpj(cnpj_input)
+
         # BUSCA: Só dispara se for um CNPJ novo
         if len(cnpj_limpo) == 14 and cnpj_limpo != st.session_state.transp_cnpj_last:
             with st.spinner("Buscando dados oficiais..."):
