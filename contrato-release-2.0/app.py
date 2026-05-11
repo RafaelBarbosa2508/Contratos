@@ -359,7 +359,7 @@ def extrair_dados_xml(texto_xml, dados):
     # --- EXTRAÇÃO DO EMITENTE (REMETENTE NA NF-e) ---
     if "<infnfe" in texto_xml_lower:
         # Localiza o bloco <emit>
-        emit_match = re.search(r"<emit>(.*?)</emit>", texto_xml, re.IGNORECASE | re.DOTALL)
+        emit_match = re.search(r"<rem>(.*?)</rem>", texto_xml, re.IGNORECASE | re.DOTALL)
         if emit_match:
             bloco_emit = emit_match.group(1)
             
@@ -374,7 +374,7 @@ def extrair_dados_xml(texto_xml, dados):
                 dados["remetente_cnpj"] = formatar_cnpj(cnpj_emit.group(1))
             
             # Localiza o bloco de endereço <enderEmit>
-            ender_match = re.search(r"<enderEmit>(.*?)</enderEmit>", bloco_emit, re.IGNORECASE | re.DOTALL)
+            ender_match = re.search(r"<enderReme>(.*?)</enderReme>", bloco_emit, re.IGNORECASE | re.DOTALL)
             if ender_match:
                 bloco_ender = ender_match.group(1)
                 lgr = re.search(r"<xLgr>(.*?)</xLgr>", bloco_ender, re.IGNORECASE)
