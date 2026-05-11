@@ -356,55 +356,57 @@ def extrair_dados_xml(texto_xml, dados):
         if produto_cte and not dados.get("mercadoria"):
             dados["mercadoria"] = produto_cte.group(1).upper()
 
-    # --- EXTRAÇÃO DO EMITENTE (REMETENTE NA NF-e) ---
-    if "<infnfe" in texto_xml_lower:
-        # Localiza o bloco <emit>
-        emit_match = re.search(r"<rem>(.*?)</rem>", texto_xml, re.IGNORECASE | re.DOTALL)
-        if emit_match:
-            bloco_emit = emit_match.group(1)
+    # --- EXTRAÇÃO DO REMETENTE (UNIFICADA: Prioriza CT-e <rem>, depois NF-e <emit>) ---
+    bloco_remetente = None
+    tag_endereco_tipo = ""
+
+    # 1. Tenta identificar primeiro o caso de CT-e (<rem>)
+    match_rem = re.search(r"<rem>(.*?)</rem>", texto_xml, re.IGNORECASE | re.DOTALL)
+    if match_rem:
+        bloco_remetente = match_rem.group(1)
+        tag_endereco_tipo = "enderReme"
+    else:
+        # 2. Se não encontrar <rem>, tenta o caso de NF-e (<emit>)
+        match_emit = re.search(r"<emit>(.*?)</emit>", texto_xml, re.IGNORECASE | re.DOTALL)
+        if match_emit:
+            bloco_remetente = match_emit.group(1)
+            tag_endereco_tipo = "enderEmit"
+
+    # Se algum dos dois foi encontrado, extraímos os dados
+    if bloco_remetente:
+        # Nome e CNPJ são tags comuns a ambos os blocos
+        nome_xml = re.search(r"<xNome>(.*?)</xNome>", bloco_remetente, re.IGNORECASE)
+        cnpj_xml = re.search(r"<CNPJ>(.*?)</CNPJ>", bloco_remetente, re.IGNORECASE)
+        
+        if nome_xml and not dados.get("remetente_nome"):
+            dados["remetente_nome"] = nome_xml.group(1).upper()
+        if cnpj_xml and not dados.get("remetente_cnpj"):
+            dados["remetente_cnpj"] = formatar_cnpj(cnpj_xml.group(1))
+
+        # Busca o endereço usando a tag dinâmica definida acima
+        ender_match = re.search(f"<{tag_endereco_tipo}>(.*?)</{tag_endereco_tipo}>", bloco_remetente, re.IGNORECASE | re.DOTALL)
+        if ender_match:
+            bloco_ender = ender_match.group(1)
+            lgr = re.search(r"<xLgr>(.*?)</xLgr>", bloco_ender, re.IGNORECASE)
+            nro = re.search(r"<nro>(.*?)</nro>", bloco_ender, re.IGNORECASE)
+            cpl = re.search(r"<xCpl>(.*?)</xCpl>", bloco_ender, re.IGNORECASE)
+            bairro = re.search(r"<xBairro>(.*?)</xBairro>", bloco_ender, re.IGNORECASE)
+            mun = re.search(r"<xMun>(.*?)</xMun>", bloco_ender, re.IGNORECASE)
+            uf = re.search(r"<UF>(.*?)</UF>", bloco_ender, re.IGNORECASE)
             
-            # Captura Nome e CNPJ
-            nome_emit = re.search(r"<xNome>(.*?)</xNome>", bloco_emit, re.IGNORECASE)
-            cnpj_emit = re.search(r"<CNPJ>(.*?)</CNPJ>", bloco_emit, re.IGNORECASE)
+            # Montagem do endereço formatado
+            partes = []
+            if lgr: partes.append(lgr.group(1))
+            if nro: partes.append(nro.group(1))
+            if cpl: partes.append(cpl.group(1))
+            if bairro: partes.append(bairro.group(1))
             
-            if nome_emit and not dados.get("remetente_nome"):
-                dados["remetente_nome"] = nome_emit.group(1).upper()
+            if not dados.get("remetente_end"):
+                dados["remetente_end"] = " - ".join(partes).upper()
             
-            if cnpj_emit and not dados.get("remetente_cnpj"):
-                dados["remetente_cnpj"] = formatar_cnpj(cnpj_emit.group(1))
-            
-            # Localiza o bloco de endereço <enderEmit>
-            ender_match = re.search(r"<enderReme>(.*?)</enderReme>", bloco_emit, re.IGNORECASE | re.DOTALL)
-            if ender_match:
-                bloco_ender = ender_match.group(1)
-                lgr = re.search(r"<xLgr>(.*?)</xLgr>", bloco_ender, re.IGNORECASE)
-                nro = re.search(r"<nro>(.*?)</nro>", bloco_ender, re.IGNORECASE)
-                cpl = re.search(r"<xCpl>(.*?)</xCpl>", bloco_ender, re.IGNORECASE)
-                bairro = re.search(r"<xBairro>(.*?)</xBairro>", bloco_ender, re.IGNORECASE)
-                mun = re.search(r"<xMun>(.*?)</xMun>", bloco_ender, re.IGNORECASE)
-                uf = re.search(r"<UF>(.*?)</UF>", bloco_ender, re.IGNORECASE)
-                
-                # Montagem do endereço estruturado
-                partes = []
-                if lgr: partes.append(lgr.group(1))
-                if nro: partes.append(nro.group(1))
-                if cpl: partes.append(cpl.group(1))
-                if bairro: partes.append(bairro.group(1))
-                
-                # Extrai a Cidade e UF
-                cidade_uf = ""
-                if mun and uf:
-                    cidade_uf = f"{mun.group(1)} / {uf.group(1)}"
-                elif mun:
-                    cidade_uf = mun.group(1)
-                
-                # CORREÇÃO: Salva a cidade diretamente na variável 'origem' que o HTML lê
-                if cidade_uf and not dados.get("origem"):
-                    dados["origem"] = cidade_uf.upper()
-                
-                # Salva o endereço isolado (Rua, Número, Complemento, Bairro)
-                if not dados.get("remetente_end"):
-                    dados["remetente_end"] = " - ".join(partes).upper()
+            # Salva a Cidade/UF na variável 'origem' para o relatório
+            if mun and uf and not dados.get("origem"):
+                dados["origem"] = f"{mun.group(1)} / {uf.group(1)}".upper()
 
     # 2. DESTINATÁRIO (<dest>)
     dest_bloco = buscar_bloco("dest", texto_xml)
