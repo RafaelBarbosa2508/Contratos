@@ -1,4 +1,0 @@
-streamlit
-pdfplumber
-requests
-jinja2
